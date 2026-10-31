@@ -18,8 +18,8 @@ h1{font-size:clamp(36px,8vw,62px);font-weight:400;margin:10px 0;color:var(--pink
 .topline{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
 .stat{font:12px Arial,sans-serif;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
 .stat strong{display:block;color:#fff;font:20px Georgia,serif;letter-spacing:0;margin-top:4px}
-#board{width:min(100%,540px);aspect-ratio:3/4;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);gap:4px;padding:5px;background:#100b17;border:1px solid #ffffff35;border-radius:14px;overflow:hidden;touch-action:pan-y}
-.tile{min-width:0;min-height:0;border:1px solid #ffffff35;border-radius:5px;background-image:url("precious.jpg");background-repeat:no-repeat;background-size:400% 400%;cursor:grab;position:relative;transition:filter .15s,transform .15s;touch-action:none}
+#board{width:min(100%,540px);aspect-ratio:3/4;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);gap:0;padding:0;background:transparent;border:0;border-radius:0;overflow:hidden;touch-action:pan-y}
+.tile{min-width:0;min-height:0;padding:0;border:0;border-radius:0;background-image:url("precious.jpg");background-repeat:no-repeat;background-size:400% 400%;cursor:grab;position:relative;transition:filter .15s,transform .15s;touch-action:none}
 .tile:focus-visible{outline:3px solid var(--gold);outline-offset:-3px}
 .tile.selected{outline:3px solid var(--gold);outline-offset:-3px;filter:brightness(1.18);transform:scale(.97)}
 .tile.dragging{opacity:.45}
@@ -34,8 +34,19 @@ button:hover{transform:translateY(-2px)}
 #win{display:none;text-align:center;margin:22px auto 4px;padding:22px 16px;border-radius:18px;background:linear-gradient(135deg,#f4b8d41c,#d9c5ff1c);border:1px solid #f4b8d455}
 #win h2{font-size:30px;color:var(--pink);font-weight:400;margin:0 0 8px}
 #win p{color:#eee0f3;line-height:1.6;margin:0 auto 15px;max-width:440px}
+
+#celebration{display:none;position:fixed;inset:0;z-index:1000;background:radial-gradient(ellipse at center,#382047f2,#100817f7);overflow:hidden;align-items:center;justify-content:center;text-align:center;padding:24px}
+#celebration.show{display:flex;animation:celebrateIn .7s ease both}
+#fireworks{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.celebration-message{position:relative;z-index:2;max-width:1000px;animation:messagePop 1s cubic-bezier(.2,.8,.2,1) both}
+.celebration-message h2{font:900 clamp(42px,10vw,108px)/.98 Arial,sans-serif;letter-spacing:clamp(1px,1vw,8px);margin:0;color:#fff;text-shadow:0 0 12px #ffb5dc,0 0 32px #d77cff,0 5px 24px #0009}
+.celebration-message p{font:clamp(18px,3vw,28px) Georgia,serif;color:#ffe0f0;margin:22px 0 26px;text-shadow:0 2px 12px #000}
+.celebration-message button{font-size:15px}
+@keyframes celebrateIn{from{opacity:0}to{opacity:1}}
+@keyframes messagePop{from{opacity:0;transform:scale(.65) translateY(25px)}to{opacity:1;transform:scale(1) translateY(0)}}
+
 footer{text-align:center;color:#9e8fa9;font:11px Arial,sans-serif;margin-top:23px;letter-spacing:1px}
-@media(max-width:480px){body{padding:16px 10px 30px}.panel{padding:12px}.topline{margin-bottom:10px}#board{gap:3px;padding:4px}.subtitle{font-size:15px}}
+@media(max-width:480px){body{padding:16px 10px 30px}.panel{padding:12px}.topline{margin-bottom:10px}#board{gap:0;padding:0}.subtitle{font-size:15px}}
 </style>
 </head>
 <body>
@@ -68,12 +79,22 @@ footer{text-align:center;color:#9e8fa9;font:11px Arial,sans-serif;margin-top:23p
 </section>
 <footer>MADE WITH LOVE · JUST FOR PRECIOUS</footer>
 </main>
+<div id="celebration" role="dialog" aria-modal="true" aria-label="Birthday celebration">
+  <canvas id="fireworks"></canvas>
+  <div class="celebration-message">
+    <h2>HAPPY BIRTHDAY<br>PRECIOUS!</h2>
+    <p>Today is all about you. May your day sparkle as brightly as you do. ♡</p>
+    <button class="primary" id="celebrateClose">Continue</button>
+  </div>
+</div>
 <script>
 const board=document.getElementById('board');
 const movesEl=document.getElementById('moves');
 const timerEl=document.getElementById('timer');
 const win=document.getElementById('win');
 const preview=document.getElementById('preview');
+const celebration=document.getElementById('celebration');
+let fireworksFrame=null;
 let order=[],moves=0,seconds=0,clock=null,started=false,selected=null,dragIndex=null;
 const total=16;
 
@@ -81,7 +102,7 @@ function solved(){return order.every((v,i)=>v===i)}
 function formatTime(s){return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
 function startClock(){if(started)return;started=true;clock=setInterval(()=>{seconds++;timerEl.textContent=formatTime(seconds)},1000)}
 function stopClock(){clearInterval(clock);clock=null}
-function resetStats(){stopClock();started=false;seconds=0;moves=0;selected=null;movesEl.textContent='0';timerEl.textContent='00:00';win.style.display='none';preview.style.display='none'}
+function resetStats(){stopClock();started=false;seconds=0;moves=0;selected=null;movesEl.textContent='0';timerEl.textContent='00:00';win.style.display='none';preview.style.display='none';closeCelebration()}
 function render(){
   board.innerHTML='';
   order.forEach((piece,index)=>{
@@ -113,8 +134,39 @@ function swap(a,b){
   moves++;movesEl.textContent=moves;render();checkWin();
 }
 function checkWin(){
-  if(solved()){stopClock();win.style.display='block';preview.style.display='block';win.scrollIntoView({behavior:'smooth',block:'nearest'})}
+  if(solved()){stopClock();win.style.display='block';preview.style.display='block';showCelebration();}
 }
+function showCelebration(){
+  celebration.classList.add('show');
+  startFireworks();
+}
+function closeCelebration(){
+  celebration.classList.remove('show');
+  stopFireworks();
+}
+document.getElementById('celebrateClose').addEventListener('click',closeCelebration);
+function startFireworks(){
+  const canvas=document.getElementById('fireworks'),ctx=canvas.getContext('2d');
+  let particles=[],running=true,lastBurst=0;
+  const resize=()=>{canvas.width=window.innerWidth*devicePixelRatio;canvas.height=window.innerHeight*devicePixelRatio;ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0)};
+  resize();window.addEventListener('resize',resize);
+  function burst(x,y){
+    const hue=Math.floor(Math.random()*360),count=75;
+    for(let i=0;i<count;i++){const angle=Math.PI*2*i/count,speed=1.5+Math.random()*5;particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:55+Math.random()*35,max:90,hue,size:1.5+Math.random()*2.5})}
+  }
+  function frame(now){
+    if(!running)return;
+    const w=window.innerWidth,h=window.innerHeight;
+    ctx.clearRect(0,0,w,h);
+    if(now-lastBurst>520){burst(w*(.12+Math.random()*.76),h*(.12+Math.random()*.55));lastBurst=now}
+    particles=particles.filter(p=>p.life>0);
+    for(const p of particles){p.x+=p.vx;p.y+=p.vy;p.vy+=.035;p.vx*=.99;p.vy*=.99;p.life--;ctx.globalAlpha=Math.max(0,p.life/p.max);ctx.fillStyle=`hsl(${p.hue} 100% 70%)`;ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill()}
+    ctx.globalAlpha=1;fireworksFrame=requestAnimationFrame(frame);
+  }
+  fireworksFrame=requestAnimationFrame(frame);
+  stopFireworks=()=>{running=false;cancelAnimationFrame(fireworksFrame);window.removeEventListener('resize',resize);ctx.clearRect(0,0,canvas.width,canvas.height)};
+}
+let stopFireworks=()=>{};
 function shuffle(){
   resetStats();order=Array.from({length:total},(_,i)=>i);
   do{for(let i=order.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[order[i],order[j]]=[order[j],order[i]]}}while(solved());
